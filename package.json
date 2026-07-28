@@ -1,0 +1,53 @@
+{
+  "name": "plotdemo",
+  "version": "0.1.0",
+  "description": "A browser-first TypeScript plotting library for responsive, interactive Canvas and WebGL charts.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jiangjonathan/plotdemo-library.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jiangjonathan/plotdemo-library/issues"
+  },
+  "homepage": "https://github.com/jiangjonathan/plotdemo-library#readme",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "SECURITY.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:settings": "node scripts/check-settings-contract.js",
+    "test": "npm run check:settings && npm run typecheck",
+    "prepublishOnly": "npm run test && npm run build"
+  },
+  "keywords": [
+    "charts",
+    "plotting",
+    "canvas",
+    "webgl",
+    "visualization",
+    "typescript"
+  ],
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
