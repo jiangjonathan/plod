@@ -1,6 +1,6 @@
 # Contributing
 
-PlotDemo is currently a TypeScript-first browser plotting library. Keep changes small, typed, and covered by the existing strict TypeScript checks.
+Plod is currently a TypeScript-first browser plotting library. Keep changes small, typed, and covered by the existing strict TypeScript checks.
 
 ## Local Setup
 

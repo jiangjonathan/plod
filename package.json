@@ -1,5 +1,5 @@
 {
-  "name": "plotdemo",
+  "name": "plod",
   "version": "0.1.0",
   "description": "A browser-first TypeScript plotting library for responsive, interactive Canvas and WebGL charts.",
   "license": "MIT",
@@ -7,12 +7,12 @@
   "sideEffects": false,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jiangjonathan/plotdemo-library.git"
+    "url": "git+https://github.com/jiangjonathan/plod.git"
   },
   "bugs": {
-    "url": "https://github.com/jiangjonathan/plotdemo-library/issues"
+    "url": "https://github.com/jiangjonathan/plod/issues"
   },
-  "homepage": "https://github.com/jiangjonathan/plotdemo-library#readme",
+  "homepage": "https://github.com/jiangjonathan/plod#readme",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [

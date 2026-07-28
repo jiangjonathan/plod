@@ -1,6 +1,6 @@
-# PlotDemo
+# Plod
 
-PlotDemo is a browser-first TypeScript plotting library focused on responsive
+Plod is a browser-first TypeScript plotting library focused on responsive
 rendering, live data, interaction, animation, Canvas, and WebGL point clouds.
 
 The library includes its plot settings interface, tooltips, selection, zoom,
@@ -10,13 +10,13 @@ benchmarks, datasets, and the chart studio live outside this repository.
 ## Install
 
 ```sh
-npm install plotdemo
+npm install plod
 ```
 
 ## Usage
 
 ```ts
-import { plot } from "plotdemo";
+import { plot } from "plod";
 
 const data = [
   { date: "2026-01-01", value: 12 },
