@@ -13,6 +13,7 @@ export type Layout = {
   lineFocusTransition?: {
     dimProgress: number;
     emphasisBySeries: ReadonlyMap<number, number>;
+    pinnedSeriesIndex?: number;
   };
   hoverOnly?: boolean;
   xDomain?: readonly [number, number];

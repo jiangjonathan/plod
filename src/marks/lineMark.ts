@@ -215,11 +215,11 @@ export function lineMark<TDatum>(options: LineMarkOptions<TDatum>): Mark<TDatum>
           );
           if (options.lineFocus && seriesEmphasis > 0.001) {
             const baseStrokeWidth = options.strokeWidth ?? DEFAULT_LINE_STROKE_WIDTH;
-            const widthLift = Math.max(1.25, baseStrokeWidth * 0.65) * seriesEmphasis;
+            const widthLift = Math.max(0.75, baseStrokeWidth * 0.4) * seriesEmphasis;
             primitives.push(...linePrimitives.map((primitive) => ({
               ...primitive,
               stroke: withAlpha(theme.palette.background, 0.72 * seriesEmphasis),
-              strokeWidth: (primitive.strokeWidth ?? baseStrokeWidth) + widthLift + 2
+              strokeWidth: (primitive.strokeWidth ?? baseStrokeWidth) + widthLift + 1.5
             })));
             primitives.push(...linePrimitives.map((primitive) => ({
               ...primitive,
@@ -239,7 +239,8 @@ export function lineMark<TDatum>(options: LineMarkOptions<TDatum>): Mark<TDatum>
         options,
         theme.palette.series,
         theme.palette.foreground,
-        geometry.hoverIndex
+        geometry.hoverIndex,
+        focusTransition?.pinnedSeriesIndex
       ));
 
       return primitives;
@@ -561,7 +562,8 @@ function resolveHoverBands<TDatum>(
   options: LineMarkOptions<TDatum>,
   palette: readonly string[],
   foreground: string,
-  hoverIndex?: LineHoverIndex<TDatum>
+  hoverIndex?: LineHoverIndex<TDatum>,
+  pinnedSeriesIndex?: number
 ): Primitive[] {
   if (points.length === 0) {
     return [];
@@ -588,6 +590,39 @@ function resolveHoverBands<TDatum>(
     }
 
     if (options.lineFocus) {
+      if (pinnedSeriesIndex !== undefined) {
+        const pinnedPoints = pointsBySeries?.get(pinnedSeriesIndex) ?? [];
+        const point = findClosestPinnedLinePoint(
+          pinnedPoints,
+          x,
+          hoverIndex?.seriesXMonotonic.get(pinnedSeriesIndex) === true
+        );
+        if (!point) {
+          return undefined;
+        }
+
+        const tooltip = resolveTooltip(options, point, [point], palette, foreground, plotArea);
+        return {
+          index: point.index,
+          seriesIndex: pinnedSeriesIndex,
+          hoverX: point.x,
+          hoverY: point.y,
+          hoverXValue: point.xValue,
+          hoverYValue: point.yValue,
+          tooltip,
+          tooltipBounds: {
+            x: point.x,
+            y: point.y,
+            width: 0,
+            height: 0
+          },
+          x: plotArea.x,
+          y: plotArea.y,
+          width: plotArea.width,
+          height: plotArea.height
+        };
+      }
+
       const lineHit = pointsBySeries
         ? findClosestLineFocusHit(pointsBySeries, x, y, plotArea, options, hoverIndex?.seriesXMonotonic)
         : undefined;
@@ -675,6 +710,28 @@ function resolveHoverBands<TDatum>(
   };
 
   const hitTest = memoizeRectHitTest(resolveHit);
+  const lineFocusHitTest = options.lineFocus && pointsBySeries
+    ? (x: number, y: number) => {
+        if (
+          x < plotArea.x ||
+          x > plotArea.x + plotArea.width ||
+          y < plotArea.y ||
+          y > plotArea.y + plotArea.height
+        ) {
+          return undefined;
+        }
+
+        const hit = findClosestLineFocusHit(
+          pointsBySeries,
+          x,
+          y,
+          plotArea,
+          options,
+          hoverIndex?.seriesXMonotonic
+        );
+        return hit ? { seriesIndex: hit.seriesIndex } : undefined;
+      }
+    : undefined;
 
   return [{
     kind: "rect",
@@ -688,8 +745,55 @@ function resolveHoverBands<TDatum>(
       index: -1
     },
     hidden: true,
+    ...(lineFocusHitTest ? { lineFocusHitTest } : {}),
     hitTest
   }];
+}
+
+function findClosestPinnedLinePoint<TDatum>(
+  points: readonly LinePoint<TDatum>[],
+  x: number,
+  xMonotonic: boolean
+): LinePoint<TDatum> | undefined {
+  if (points.length === 0) {
+    return undefined;
+  }
+
+  if (!xMonotonic) {
+    let closest = points[0] as LinePoint<TDatum>;
+    let closestDistance = Math.abs(closest.x - x);
+    for (let index = 1; index < points.length; index += 1) {
+      const point = points[index] as LinePoint<TDatum>;
+      const distance = Math.abs(point.x - x);
+      if (distance < closestDistance) {
+        closest = point;
+        closestDistance = distance;
+      }
+    }
+    return closest;
+  }
+
+  let low = 0;
+  let high = points.length - 1;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    const point = points[mid];
+    if (point && point.x < x) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+
+  const right = points[low] as LinePoint<TDatum> | undefined;
+  const left = points[low - 1] as LinePoint<TDatum> | undefined;
+  if (!right) {
+    return left;
+  }
+  if (!left) {
+    return right;
+  }
+  return Math.abs(left.x - x) <= Math.abs(right.x - x) ? left : right;
 }
 
 function memoizeRectHitTest(

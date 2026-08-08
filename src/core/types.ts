@@ -300,6 +300,7 @@ export type TooltipSpec = {
   shadow?: boolean;
   tabularNumbers?: boolean;
   titleFont?: "mono" | "regular";
+  titleWeight?: "regular" | "semibold" | "bold";
 };
 
 export type FocusMode = "index" | "domain";
@@ -515,6 +516,10 @@ export type Primitive =
       pixelSnap?: boolean;
       hidden?: boolean;
       clip?: Rect;
+      /** Proximity-only line hit test used for click-to-pin interactions. */
+      lineFocusHitTest?: (x: number, y: number) => {
+        seriesIndex: number;
+      } | undefined;
       hitTest?: (x: number, y: number) => {
         index: number;
         tooltip?: TooltipContent | undefined;

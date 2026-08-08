@@ -6,7 +6,7 @@ import { resolveEdgeBlurSize, resolveMarkKinds, resolvePlotEdgeBlur } from "./ed
 import { computeLayout, PLOT_CONTROL_BUTTON_SIZE, resolveAxisTitlePlotOffset } from "../layout/computeLayout";
 import type { Layout } from "../layout/types";
 import { attachHoverController } from "../interaction/hoverController";
-import { attachPlotChromeHoverGate } from "../interaction/plotUiChrome";
+import { attachPlotChromeHoverGate, isPlotUiChrome } from "../interaction/plotUiChrome";
 import { attachSelectionController } from "../interaction/selectionController";
 import { attachTooltipController } from "../interaction/tooltipController";
 import { canvasRenderer } from "../renderers/canvasRenderer";
@@ -234,6 +234,13 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
   let skipXFocusLerpOnce = false;
   let lastSeriesToggleTime = 0;
   let hover: HoverState | undefined;
+  let pinnedLineSeriesIndex: number | undefined;
+  let linePinGesture: {
+    x: number;
+    y: number;
+    seriesIndex?: number;
+  } | undefined;
+  let linePinHoverRefreshFrame: number | undefined;
   let lineFocusTransitionFrame: number | undefined;
   let lineFocusDimProgress = 0;
   let lineFocusEmphasisBySeries = new Map<number, number>();
@@ -332,7 +339,29 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
     clearDomainAnimation();
   }
 
+  function finishPlotAnimationForViewportChange(): void {
+    if (animationFrame === undefined) {
+      return;
+    }
+
+    cancelAnimationFrame(animationFrame);
+    animationFrame = undefined;
+    markAnimationProgress = 1;
+    axisAnimationActive = false;
+    axisAnimationRuntime = undefined;
+    axisAnimationProfile = "none";
+    animationProfile = undefined;
+    randomFillFade = false;
+    scatterAnimationCache = undefined;
+    scatterAnimationCacheKey = undefined;
+    resetTickFadeForAxisAnimation();
+  }
+
   function applySelection(selection: PlotSelection): void {
+    // Intro/replay and viewport interpolation must not own the canvas at the
+    // same time. Finish the mark animation at the committed selection boundary
+    // so the domain transition starts from one stable, fully rendered scene.
+    finishPlotAnimationForViewportChange();
     invalidateHoverForViewChange({ clearLineHover: true });
     resetDomainAnimationForSelection();
     focus = composeSelectionFocus(focus, selection);
@@ -641,6 +670,7 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
   const pointCloudResizePhase = initialBuilt.markPrimitives.some((primitive) => primitive.kind === "point-cloud")
     ? nextPointCloudResizePhase++ % 2
     : undefined;
+  let pointCloudResizeDrawDeferred = false;
   lastRenderedXDomain = resolveLayoutXDomain(initialBuilt.axes);
   lastRenderedYDomain = resolveLayoutYDomain(initialBuilt.axes);
   lastRenderedFocus = focus;
@@ -766,6 +796,7 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
           }
         },
         onClear: () => {
+          finishPlotAnimationForViewportChange();
           clearDomainAnimation();
           focus = undefined;
           clearLockedViewport();
@@ -858,6 +889,14 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
         }
       })
     : undefined;
+  const lineFocusPointerDownHandler = container instanceof HTMLElement ? beginLinePinGesture : undefined;
+  const lineFocusClick = container instanceof HTMLElement ? finishLinePinGesture : undefined;
+  const lineFocusPointerCancel = () => cancelLinePinGesture();
+  if (container instanceof HTMLElement && lineFocusPointerDownHandler && lineFocusClick) {
+    container.addEventListener("pointerdown", lineFocusPointerDownHandler, true);
+    container.addEventListener("pointercancel", lineFocusPointerCancel, true);
+    container.addEventListener("click", lineFocusClick);
+  }
 
   renderScene(scene);
   syncDataSubscription();
@@ -1122,6 +1161,7 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
       if (focus === undefined && lockedViewport === undefined) {
         return;
       }
+      finishPlotAnimationForViewportChange();
       focus = undefined;
       clearLockedViewport();
       invalidateHoverForViewChange({ clearLineHover: true });
@@ -1177,6 +1217,9 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
       if (lineFocusTransitionFrame !== undefined) {
         cancelAnimationFrame(lineFocusTransitionFrame);
       }
+      if (linePinHoverRefreshFrame !== undefined) {
+        cancelAnimationFrame(linePinHoverRefreshFrame);
+      }
       lineFocusTransition = undefined;
       lineFocusEmphasisBySeries.clear();
       scatterHoverAnimations.clear();
@@ -1205,6 +1248,11 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
       tooltipController?.destroy();
       selectionController?.destroy();
       hoverController?.destroy();
+      if (container instanceof HTMLElement && lineFocusPointerDownHandler && lineFocusClick) {
+        container.removeEventListener("pointerdown", lineFocusPointerDownHandler, true);
+        container.removeEventListener("pointercancel", lineFocusPointerCancel, true);
+        container.removeEventListener("click", lineFocusClick);
+      }
       renderer.destroy(surface);
     },
     getPlotArea() {
@@ -2633,12 +2681,20 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
     if (resizeSettleTimer !== undefined) {
       clearTimeout(resizeSettleTimer);
     }
+    // Resize frames already sample axis tick opacity. Do not leave an
+    // independent fade frame queued as well: dashboards resize several plots
+    // together, so that duplicate loop multiplies the per-frame axes work.
     if (tickFadeFrame !== undefined) {
       cancelAnimationFrame(tickFadeFrame);
       tickFadeFrame = undefined;
     }
     resizeSettleTimer = setTimeout(() => {
       resizeSettleTimer = undefined;
+      // Dashboard preview may skip this plot's WebGL paint for a frame. The
+      // settle pass must replace that retained surface, even if only ticks are
+      // otherwise dirty, or the axes and point cloud can end at different sizes.
+      const needsPointCloudResizeRedraw = pointCloudResizeDrawDeferred;
+      pointCloudResizeDrawDeferred = false;
       if (suppressTickFadeUntilResizeSettles) {
         // The dashboard exit resize already painted its final ticks at full
         // opacity. Resetting before the settle render makes any exact rebuild
@@ -2646,7 +2702,7 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
         suppressTickFadeUntilResizeSettles = false;
         resetTickFadeForAxisAnimation();
       }
-      forceFullRedrawFlag = streamingDataAppended || !renderCache;
+      forceFullRedrawFlag = needsPointCloudResizeRedraw || streamingDataAppended || !renderCache;
       updateSettingsButtonsPosition(surface);
       if (!forceFullRedrawFlag && renderCache && currentAxes && hasActiveTickFade()) {
         redrawAxisTickFadeFrame();
@@ -2666,13 +2722,20 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
       const deferPointCloudDraw = dashboardResizePreviewEnabled(spec) &&
         pointCloudResizePhase !== undefined &&
         !isPointCloudResizePaintSlot(time, pointCloudResizePhase);
-      if (!redrawResizeFastPath(deferPointCloudDraw) && !redrawResizeCacheFastPath()) {
-        forceFullRedrawFlag = true;
-        redraw({
-          skipHover: hover?.markType === "scatter",
-          skipInteractionRefresh: true
-        });
+      if (redrawResizeFastPath(deferPointCloudDraw)) {
+        pointCloudResizeDrawDeferred = deferPointCloudDraw;
+        return;
       }
+      if (redrawResizeCacheFastPath()) {
+        pointCloudResizeDrawDeferred = false;
+        return;
+      }
+      pointCloudResizeDrawDeferred = false;
+      forceFullRedrawFlag = true;
+      redraw({
+        skipHover: hover?.markType === "scatter",
+        skipInteractionRefresh: true
+      });
     });
   }
 
@@ -3585,13 +3648,10 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
     }
 
     tickFadeState.initialized = true;
-    // Resize and interaction frames already sample the current fade. Starting
-    // another RAF here would make dense zoom redraw the point cloud twice.
-    scheduleTickFadeFrame(
-      resizeSettleTimer === undefined &&
-      !isContinuousInteractionActive &&
-      fading
-    );
+    // Resize owns the frame budget while it is active. Once it settles, the
+    // settle pass resumes any remaining fade. Other interactions still keep an
+    // independent fade driver so ticks cannot be stranded at a zoom limit.
+    scheduleTickFadeFrame(resizeSettleTimer === undefined && fading);
   }
 
   function hasActiveTickFade(): boolean {
@@ -3679,7 +3739,13 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
         ...renderCache.markPrimitives,
         ...axisPrimitives
       ],
-      ...(canSkipFocusSettleFullRedraw(renderCache) ? { deferPointCloudDraw: true } : {})
+      ...(
+        resizeSettleTimer !== undefined ||
+        isContinuousInteractionActive ||
+        canSkipFocusSettleFullRedraw(renderCache)
+          ? { deferPointCloudDraw: true }
+          : {}
+      )
     }, renderCache.dataWindow);
 
     renderScene(scene);
@@ -4013,13 +4079,15 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
       ? patchPointCloudPlotArea(updatedMarks, focusedLayout.plotArea)
       : updatedMarks;
 
+    // Keep tick continuity for raw point-cloud focus transitions too. Follow-up
+    // fade frames set deferPointCloudDraw, so only the 2D axes are repainted.
     const { gridPrimitives, axisPrimitives: baseAxis } = encodeGridAndAxesWithTickFade(
       focusedAxes,
       focusedLayout.plotArea,
       theme,
       undefined,
       undefined,
-      !canSkipFocusSettleFullRedraw(cache)
+      !axisAnimationActive
     );
     const axisPrimitives = [
       ...baseAxis,
@@ -4485,6 +4553,113 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
     return value?.markType === "line" ? value.seriesIndex : undefined;
   }
 
+  function lineFocusSeriesAtPoint(x: number, y: number): number | undefined {
+    for (let index = scene.primitives.length - 1; index >= 0; index -= 1) {
+      const primitive = scene.primitives[index];
+      if (primitive?.kind !== "rect" || !primitive.lineFocusHitTest) {
+        continue;
+      }
+      const hit = primitive.lineFocusHitTest(x, y);
+      if (hit) {
+        return hit.seriesIndex;
+      }
+    }
+    return undefined;
+  }
+
+  function beginLinePinGesture(event: PointerEvent): void {
+    cancelLinePinGesture();
+    if (
+      !(container instanceof HTMLElement) ||
+      event.button !== 0 ||
+      !event.isPrimary ||
+      !lineFocusEnabled() ||
+      isPlotUiChrome(event.target)
+    ) {
+      return;
+    }
+
+    const bounds = container.getBoundingClientRect();
+    const seriesIndex = lineFocusSeriesAtPoint(
+      event.clientX - bounds.left,
+      event.clientY - bounds.top
+    );
+    linePinGesture = {
+      x: event.clientX,
+      y: event.clientY,
+      ...(seriesIndex !== undefined ? { seriesIndex } : {})
+    };
+
+    const heldSeriesIndex = pinnedLineSeriesIndex ?? seriesIndex;
+    if (heldSeriesIndex !== undefined) {
+      settleLineFocusVisual(heldSeriesIndex);
+    }
+  }
+
+  function finishLinePinGesture(event: MouseEvent): void {
+    if (
+      !(container instanceof HTMLElement) ||
+      event.button !== 0 ||
+      !lineFocusEnabled() ||
+      isPlotUiChrome(event.target)
+    ) {
+      cancelLinePinGesture();
+      return;
+    }
+
+    const gesture = linePinGesture;
+    if (
+      !gesture ||
+      Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) >= 8
+    ) {
+      cancelLinePinGesture();
+      return;
+    }
+    linePinGesture = undefined;
+
+    const bounds = container.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    const plotArea = scene.plotArea;
+    if (
+      x < plotArea.x ||
+      x > plotArea.x + plotArea.width ||
+      y < plotArea.y ||
+      y > plotArea.y + plotArea.height
+    ) {
+      restoreLineFocusAfterCancelledGesture(gesture.seriesIndex);
+      return;
+    }
+
+    if (gesture.seriesIndex !== undefined) {
+      setPinnedLineFocus(gesture.seriesIndex);
+    } else if (pinnedLineSeriesIndex !== undefined) {
+      setPinnedLineFocus(undefined);
+    } else {
+      restoreLineFocusAfterCancelledGesture(gesture.seriesIndex);
+    }
+  }
+
+  function cancelLinePinGesture(): void {
+    const heldSeriesIndex = linePinGesture?.seriesIndex;
+    linePinGesture = undefined;
+    restoreLineFocusAfterCancelledGesture(heldSeriesIndex);
+  }
+
+  function restoreLineFocusAfterCancelledGesture(heldSeriesIndex: number | undefined): void {
+    if (pinnedLineSeriesIndex !== undefined) {
+      settleLineFocusVisual(pinnedLineSeriesIndex);
+      return;
+    }
+    if (heldSeriesIndex === undefined) {
+      return;
+    }
+    transitionLineFocusVisual(
+      { markType: "line", index: -1, seriesIndex: heldSeriesIndex },
+      hover
+    );
+  }
+
   function transitionLineFocusVisual(
     previous: HoverState | undefined,
     next: HoverState | undefined
@@ -4494,8 +4669,9 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
       return;
     }
 
-    const previousSeriesIndex = lineFocusSeriesIndex(previous);
-    const nextSeriesIndex = lineFocusSeriesIndex(next);
+    const lockedSeriesIndex = pinnedLineSeriesIndex ?? linePinGesture?.seriesIndex;
+    const previousSeriesIndex = lockedSeriesIndex ?? lineFocusSeriesIndex(previous);
+    const nextSeriesIndex = lockedSeriesIndex ?? lineFocusSeriesIndex(next);
     if (previousSeriesIndex === nextSeriesIndex) {
       return;
     }
@@ -4524,6 +4700,53 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
     if (lineFocusTransitionFrame === undefined) {
       lineFocusTransitionFrame = requestAnimationFrame(tickLineFocusTransition);
     }
+  }
+
+  function settleLineFocusVisual(seriesIndex: number): void {
+    if (lineFocusTransitionFrame !== undefined) {
+      cancelAnimationFrame(lineFocusTransitionFrame);
+      lineFocusTransitionFrame = undefined;
+    }
+
+    lineFocusTransition = undefined;
+    lineFocusDimProgress = 1;
+    lineFocusEmphasisBySeries = new Map([[seriesIndex, 1]]);
+  }
+
+  function setPinnedLineFocus(seriesIndex: number | undefined): void {
+    if (seriesIndex !== undefined) {
+      pinnedLineSeriesIndex = seriesIndex;
+      settleLineFocusVisual(seriesIndex);
+      forceFullRedrawFlag = true;
+      scheduleRedraw();
+      scheduleLinePinHoverRefresh();
+      return;
+    }
+
+    const previousSeriesIndex = pinnedLineSeriesIndex;
+    pinnedLineSeriesIndex = undefined;
+    if (previousSeriesIndex === undefined) {
+      return;
+    }
+    transitionLineFocusVisual(
+      { markType: "line", index: -1, seriesIndex: previousSeriesIndex },
+      undefined
+    );
+    hoverController?.clear();
+    tooltipController?.hide();
+    forceFullRedrawFlag = true;
+    scheduleRedraw();
+  }
+
+  function scheduleLinePinHoverRefresh(): void {
+    if (linePinHoverRefreshFrame !== undefined) {
+      cancelAnimationFrame(linePinHoverRefreshFrame);
+    }
+    linePinHoverRefreshFrame = requestAnimationFrame(() => {
+      linePinHoverRefreshFrame = undefined;
+      hoverController?.forceRefresh();
+      tooltipController?.refresh();
+    });
   }
 
   function tickLineFocusTransition(time: number): void {
@@ -4571,13 +4794,18 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
   }
 
   function currentLineFocusTransition(): Layout["lineFocusTransition"] {
-    if (lineFocusDimProgress <= 0.001 && lineFocusEmphasisBySeries.size === 0) {
+    if (
+      pinnedLineSeriesIndex === undefined &&
+      lineFocusDimProgress <= 0.001 &&
+      lineFocusEmphasisBySeries.size === 0
+    ) {
       return undefined;
     }
 
     return {
       dimProgress: lineFocusDimProgress,
-      emphasisBySeries: lineFocusEmphasisBySeries
+      emphasisBySeries: lineFocusEmphasisBySeries,
+      ...(pinnedLineSeriesIndex !== undefined ? { pinnedSeriesIndex: pinnedLineSeriesIndex } : {})
     };
   }
 
@@ -4586,9 +4814,15 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
       cancelAnimationFrame(lineFocusTransitionFrame);
       lineFocusTransitionFrame = undefined;
     }
+    if (linePinHoverRefreshFrame !== undefined) {
+      cancelAnimationFrame(linePinHoverRefreshFrame);
+      linePinHoverRefreshFrame = undefined;
+    }
     lineFocusTransition = undefined;
     lineFocusDimProgress = 0;
     lineFocusEmphasisBySeries = new Map();
+    pinnedLineSeriesIndex = undefined;
+    linePinGesture = undefined;
   }
 
   function resolveScatterHoverForScene(): HoverState | undefined {
@@ -5738,7 +5972,10 @@ function bakeResizeMarkPrimitives(
                         : { hoverX: hit.hoverX * transform.a + transform.e }),
                       ...(hit.hoverY === undefined
                         ? {}
-                        : { hoverY: hit.hoverY * transform.d + transform.f })
+                        : { hoverY: hit.hoverY * transform.d + transform.f }),
+                      ...(hit.tooltipBounds
+                        ? { tooltipBounds: transformResizeRect(hit.tooltipBounds, transform) }
+                        : {})
                     }
                   : undefined;
               }

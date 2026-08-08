@@ -160,7 +160,13 @@ export function attachTooltipController(
         specForRender && typeof specForRender === "object" && specForRender.titleFont === "regular"
           ? "regular"
           : "mono";
-      renderTooltip(tooltip, lastHit.content, getTheme(), useTabular, titleFontMode);
+      const titleWeight =
+        specForRender && typeof specForRender === "object" && specForRender.titleWeight === "regular"
+          ? "regular"
+          : specForRender && typeof specForRender === "object" && specForRender.titleWeight === "bold"
+            ? "bold"
+            : "semibold";
+      renderTooltip(tooltip, lastHit.content, getTheme(), useTabular, titleFontMode, titleWeight);
       lastRenderedSignature = lastHit.signature;
     }
 
@@ -468,9 +474,10 @@ function renderTooltip(
   content: TooltipContent,
   theme: Theme,
   tabularNumbers = true,
-  titleFontMode: "mono" | "regular" = "mono"
+  titleFontMode: "mono" | "regular" = "mono",
+  titleWeight: "regular" | "semibold" | "bold" = "semibold"
 ): void {
-  const layout = layoutTooltip(content, theme, titleFontMode);
+  const layout = layoutTooltip(content, theme, titleFontMode, titleWeight, tabularNumbers);
 
   element.style.display = "block";
   element.style.width = `${layout.width}px`;
@@ -478,7 +485,7 @@ function renderTooltip(
   element.style.padding = `${layout.paddingY}px ${layout.paddingX}px`;
   // Set font longhands so we don't clobber font-variant-numeric via the font shorthand.
   element.style.fontSize = `${Math.max(10, theme.typography.fontSize - 1)}px`;
-      element.style.fontFamily = SYSTEM_FONT_FAMILY;
+  element.style.fontFamily = SYSTEM_FONT_FAMILY;
   element.style.fontWeight = "normal";
   element.style.fontVariantNumeric = tabularNumbers ? "tabular-nums" : "normal";
   element.style.fontFeatureSettings = tabularNumbers ? '"tnum"' : "normal";
@@ -493,7 +500,7 @@ function renderTooltip(
 
     title.style.display = "flex";
     title.style.alignItems = "center";
-    title.style.fontWeight = "600";
+    title.style.fontWeight = titleWeight === "regular" ? "400" : titleWeight === "bold" ? "700" : "600";
     title.style.fontFamily = titleFontMode === "mono" ? TOOLTIP_TITLE_MONO_FONT : theme.typography.fontFamily;
     title.style.marginBottom = `${layout.lineGap}px`;
     if (titlePair) {

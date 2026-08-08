@@ -46,6 +46,7 @@ export type BarChartOptions<TDatum> = {
   tooltipShadow?: boolean;
   tooltipTabularNumbers?: boolean;
   tooltipTitleFont?: "mono" | "regular";
+  tooltipTitleWeight?: "regular" | "semibold" | "bold";
   hoverStyle?: HoverStyle;
   orientation?: "vertical" | "horizontal";
   yAxisPosition?: "left" | "right";
@@ -115,13 +116,15 @@ export function barChart<TDatum>(options: BarChartOptions<TDatum>): PlotSpec<TDa
     options.tooltipPosition !== undefined ||
     options.tooltipShadow !== undefined ||
     options.tooltipTabularNumbers !== undefined ||
-    options.tooltipTitleFont !== undefined
+    options.tooltipTitleFont !== undefined ||
+    options.tooltipTitleWeight !== undefined
   ) {
     spec.tooltip = {
       ...(options.tooltipPosition !== undefined ? { position: options.tooltipPosition } : {}),
       ...(options.tooltipShadow !== undefined ? { shadow: options.tooltipShadow } : {}),
       tabularNumbers: options.tooltipTabularNumbers !== false,
-      ...(options.tooltipTitleFont !== undefined ? { titleFont: options.tooltipTitleFont } : {})
+      ...(options.tooltipTitleFont !== undefined ? { titleFont: options.tooltipTitleFont } : {}),
+      ...(options.tooltipTitleWeight !== undefined ? { titleWeight: options.tooltipTitleWeight } : {})
     };
   }
 

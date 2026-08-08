@@ -8,7 +8,7 @@ import type { DataInput } from "../data/types";
 
 export class PlotBuilder<TDatum = any> {
   private container: Element;
-  private baseOptions: any = {};
+  private baseOptions: any = { tooltipTabularNumbers: true };
   private finalSpecModifier?: (spec: PlotSpec<TDatum>) => void;
 
   constructor(container: Element | string) {
@@ -59,12 +59,14 @@ export class PlotBuilder<TDatum = any> {
     shadow?: boolean;
     tabularNumbers?: boolean;
     titleFont?: "mono" | "regular";
+    titleWeight?: "regular" | "semibold" | "bold";
     format?: (datum: TDatum, index: number) => any;
   }): this {
     if (opts.position !== undefined) this.baseOptions.tooltipPosition = opts.position;
     if (opts.shadow !== undefined) this.baseOptions.tooltipShadow = opts.shadow;
     if (opts.tabularNumbers !== undefined) this.baseOptions.tooltipTabularNumbers = opts.tabularNumbers;
     if (opts.titleFont !== undefined) this.baseOptions.tooltipTitleFont = opts.titleFont;
+    if (opts.titleWeight !== undefined) this.baseOptions.tooltipTitleWeight = opts.titleWeight;
     if (opts.format !== undefined) this.baseOptions.tooltip = opts.format;
     return this;
   }

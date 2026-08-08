@@ -20,21 +20,39 @@ import { SYSTEM_MONO_FONT_FAMILY } from "../themes/defaultTheme";
 
 export const TOOLTIP_TITLE_MONO_FONT = SYSTEM_MONO_FONT_FAMILY;
 
-export function layoutTooltip(content: TooltipContent, theme: Theme, titleFontMode: "mono" | "regular" = "mono"): TooltipLayout {
+export function layoutTooltip(
+  content: TooltipContent,
+  theme: Theme,
+  titleFontMode: "mono" | "regular" = "mono",
+  titleWeight: "regular" | "semibold" | "bold" = "semibold",
+  tabularNumbers = true
+): TooltipLayout {
   const title = content.title;
   const lines = content.lines;
   const font = `${theme.typography.fontSize}px ${theme.typography.fontFamily}`;
-  const titleFont = `600 ${theme.typography.fontSize}px ${titleFontMode === "mono" ? TOOLTIP_TITLE_MONO_FONT : theme.typography.fontFamily}`;
+  const titleFontWeight = titleWeight === "regular" ? 400 : titleWeight === "bold" ? 700 : 600;
+  const titleFont = `${titleFontWeight} ${theme.typography.fontSize}px ${titleFontMode === "mono" ? TOOLTIP_TITLE_MONO_FONT : theme.typography.fontFamily}`;
   const lineHeight = Math.ceil(theme.typography.fontSize * 1.35);
   const titlePair = title ? splitTooltipLine(title) : undefined;
   const titleWidth = titlePair
-    ? measureText(titlePair.name, titleFont) + columnGap + measureText(titlePair.value, titleFont) + (content.titleMarker ? 14 : 0)
+    ? measureText(titlePair.name, titleFont, tabularNumbers) +
+      columnGap +
+      measureText(titlePair.value, titleFont, tabularNumbers) +
+      (content.titleMarker ? 14 : 0)
     : title
-      ? measureText(title, titleFont) + (content.titleMarker ? 14 : 0)
+      ? measureText(title, titleFont, tabularNumbers) + (content.titleMarker ? 14 : 0)
       : 0;
   const widths = [
     ...(titleWidth > 0 ? [titleWidth] : []),
-    ...lines.map((line, index) => measureTooltipLine(line, font, title === undefined && index === 0, content.markers?.[index] !== undefined))
+    ...lines.map((line, index) =>
+      measureTooltipLine(
+        line,
+        font,
+        title === undefined && index === 0,
+        content.markers?.[index] !== undefined,
+        tabularNumbers
+      )
+    )
   ];
   const lineCount = lines.length + (title ? 1 : 0);
   const contentHeight = lineCount * lineHeight + Math.max(0, lineCount - 1) * lineGap;
@@ -56,20 +74,31 @@ export function layoutTooltip(content: TooltipContent, theme: Theme, titleFontMo
   return layout;
 }
 
-function measureTooltipLine(line: string, font: string, forcePlain: boolean, hasMarker: boolean): number {
+function measureTooltipLine(
+  line: string,
+  font: string,
+  forcePlain: boolean,
+  hasMarker: boolean,
+  tabularNumbers: boolean
+): number {
   const markerWidth = hasMarker ? 14 : 0;
 
   if (forcePlain) {
-    return markerWidth + measureText(line, font);
+    return markerWidth + measureText(line, font, tabularNumbers);
   }
 
   const pair = splitTooltipLine(line);
 
   if (!pair) {
-    return markerWidth + measureText(line, font);
+    return markerWidth + measureText(line, font, tabularNumbers);
   }
 
-  return markerWidth + measureText(pair.name, font) + columnGap + measureText(pair.value, font);
+  return (
+    markerWidth +
+    measureText(pair.name, font, tabularNumbers) +
+    columnGap +
+    measureText(pair.value, font, tabularNumbers)
+  );
 }
 
 export function splitTooltipLine(line: string): { name: string; value: string } | undefined {
@@ -89,7 +118,7 @@ export function splitTooltipLine(line: string): { name: string; value: string } 
   return { name, value };
 }
 
-function measureText(text: string, font: string): number {
+function measureText(text: string, font: string, tabularNumbers: boolean): number {
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
 
@@ -98,5 +127,9 @@ function measureText(text: string, font: string): number {
   }
 
   context.font = font;
-  return context.measureText(text).width;
+  // Canvas text metrics do not expose font-variant-numeric. Measuring every
+  // digit as the same glyph keeps the box and value column stable when the
+  // rendered tooltip uses tabular numerals.
+  const measuredText = tabularNumbers ? text.replace(/\d/g, "0") : text;
+  return context.measureText(measuredText).width;
 }
