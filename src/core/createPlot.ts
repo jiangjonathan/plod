@@ -879,7 +879,7 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
             if (nextHover?.markType !== "scatter") {
               renderer.renderOverlay(surface, nextHover ? buildHoverOverlayScene(nextHover) : emptyOverlayScene());
             } else {
-              renderer.renderOverlay(surface, applyScatterHoverState(sceneWithoutHover));
+              renderer.renderOverlay(surface, applyScatterHoverState(scene));
             }
             tooltipController?.refresh();
             return;
@@ -4958,7 +4958,7 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
         : sceneWithoutHover
     );
 
-    if (overlayScene.scatterHover?.length) {
+    if (overlayScene.scatterHover?.length || overlayScene.hover?.markType === "scatter") {
       renderScatterHover(surface, overlayScene);
       return;
     }
@@ -7546,7 +7546,7 @@ function toggleFullscreen(element: Element | null): void {
 
 function resolveScatterHoverInteraction<TDatum>(spec: PlotSpec<TDatum>): ScatterHoverInteraction {
   if (spec.interactions === false) {
-    return "grow";
+    return "crosshair";
   }
 
   const setting = spec.interactions?.scatterHover;
@@ -7555,7 +7555,7 @@ function resolveScatterHoverInteraction<TDatum>(spec: PlotSpec<TDatum>): Scatter
     return "none";
   }
 
-  return "grow";
+  return setting ?? "crosshair";
 }
 
 function readSize<TDatum>(container: Element, spec: PlotSpec<TDatum>): Size {

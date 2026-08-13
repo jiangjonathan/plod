@@ -513,7 +513,7 @@ export function scatterMark<TDatum>(options: ScatterMarkOptions<TDatum>): Mark<T
         plotArea: layout.plotArea,
         ...(layout.clipArea ? { clipArea: layout.clipArea } : {})
       });
-      const hoverInteraction = options.hoverInteraction ?? "grow";
+      const hoverInteraction = options.hoverInteraction ?? "crosshair";
       const maxRadius = options.size
         ? Math.max(...(options.radiusRange ?? [2, 10])) * (layout.animation?.profile === "rise" ? animated.radius / Math.max(radius, Number.EPSILON) : 1)
         : animated.radius;

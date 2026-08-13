@@ -382,7 +382,7 @@ export type MarkerStyle = {
 
 export type ScatterPointStyle = "solid" | "translucent";
 
-export type ScatterHoverInteraction = "none" | "grow";
+export type ScatterHoverInteraction = "none" | "grow" | "crosshair";
 
 export type ScatterHoverEntry = {
   index: number;

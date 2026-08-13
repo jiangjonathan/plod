@@ -210,7 +210,7 @@ export function generateSettingsHtml<TDatum>(ctx: SettingsHtmlContext<TDatum>): 
     } else if (markKind === "scatter") {
       const shape = presetOpts.shape ?? "circle";
       const pointStyle = presetOpts.pointStyle ?? "solid";
-      const hoverInteraction = presetOpts.hoverInteraction ?? "grow";
+      const hoverInteraction = presetOpts.hoverInteraction ?? "crosshair";
 
       chartSpecificHTML = `
         <details class="plot-settings-section" data-section="scatter"${settingsSectionOpenAttr("scatter")}>

@@ -36,7 +36,8 @@ export function drawScatterSceneHover(
   scene: SceneGraph
 ): void {
   const scatterEntries = scene.scatterHover ?? [];
-  const hasScatterHover = scatterEntries.length > 0;
+  const scatterHover = scene.hover?.markType === "scatter" ? scene.hover : undefined;
+  const hasScatterHover = scatterEntries.length > 0 || scatterHover !== undefined;
 
   if (!hasScatterHover) {
     context.clearRect(0, 0, scene.size.width, scene.size.height);
@@ -50,7 +51,7 @@ export function drawScatterSceneHover(
       continue;
     }
 
-    const hoverInteraction = primitive.hoverInteraction ?? "grow";
+    const hoverInteraction = primitive.hoverInteraction ?? "crosshair";
 
     if (hoverInteraction === "none") {
       context.clearRect(0, 0, scene.size.width, scene.size.height);
@@ -61,10 +62,41 @@ export function drawScatterSceneHover(
 
     if (hoverInteraction === "grow") {
       drawGrowScatterHovers(context, primitive, scatterEntries, scene.hover);
+    } else if (hoverInteraction === "crosshair" && scatterHover) {
+      drawScatterCrosshair(context, primitive, scatterHover.index);
     }
 
     return;
   }
+}
+
+function drawScatterCrosshair(
+  context: CanvasRenderingContext2D,
+  primitive: Extract<Primitive, { kind: "point-cloud" }>,
+  index: number
+): void {
+  const hit = primitive.lookup?.(index);
+  const plotArea = primitive.plotArea ?? primitive.clip;
+
+  if (!hit || !plotArea) {
+    return;
+  }
+
+  context.save();
+  context.beginPath();
+  context.rect(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+  context.clip();
+  context.beginPath();
+  context.moveTo(hit.x, plotArea.y);
+  context.lineTo(hit.x, plotArea.y + plotArea.height);
+  context.moveTo(plotArea.x, hit.y);
+  context.lineTo(plotArea.x + plotArea.width, hit.y);
+  context.strokeStyle = hit.fill ?? primitive.fill ?? "#111111";
+  context.globalAlpha = 0.35;
+  context.lineWidth = 1;
+  context.setLineDash([4, 4]);
+  context.stroke();
+  context.restore();
 }
 
 function drawGrowScatterHovers(

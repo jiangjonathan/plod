@@ -106,7 +106,7 @@ export function scatterChart<TDatum>(
     },
     interactions: {
       focusMode: "domain",
-      scatterHover: options.hoverInteraction ?? "grow",
+      scatterHover: options.hoverInteraction ?? "crosshair",
       scatterHoverRadius: options.hoverGrowRadius ?? 7,
     },
     resizeTransition: options.resizeTransition === false
