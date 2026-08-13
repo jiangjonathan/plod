@@ -835,7 +835,7 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
           transitionLineFocusVisual(previousHover, nextHover);
           const scatterHoverMode = resolveScatterHoverInteraction(spec);
 
-          if (scatterHoverMode === "grow" && (nextHover?.markType === "scatter" || previousMarkType === "scatter")) {
+          if (scatterHoverMode !== "none" && (nextHover?.markType === "scatter" || previousMarkType === "scatter")) {
             if (nextHover?.markType === "scatter") {
               const { hover: _sceneHover, ...sceneWithoutHover } = scene;
               scene = { ...sceneWithoutHover, hover: nextHover };
@@ -4978,7 +4978,7 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
   function applyScatterHoverState(nextScene: SceneGraph): SceneGraph {
     const scatterHoverMode = resolveScatterHoverInteraction(spec);
 
-    if (scatterHoverMode !== "grow") {
+    if (scatterHoverMode === "none") {
       return nextScene;
     }
 

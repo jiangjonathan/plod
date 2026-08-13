@@ -1,29 +1,57 @@
 # Plod
 
-Plod is a browser-first TypeScript plotting library for responsive,
-interactive charts. It renders regular charts with Canvas and can move large
-scatter plots to WebGL while keeping the same plot API.
+Plod is a performance-first TypeScript plotting engine for responsive,
+interactive charts. It combines Canvas rendering, WebGL point clouds,
+pixel-budgeted level of detail, and incremental updates behind one browser API.
 
-Plod includes line, area, bar, and scatter presets; tooltips; selection; zoom
-and pan; animation; live-data updates; responsive resizing; plot controls; and
-PNG export. The demo site, benchmarks, datasets, and chart studio live outside
-this repository.
+The library has no runtime npm dependencies.
 
-## Features
+## What Plod optimizes
 
-- Fluent, type-safe chart builder for common charts
-- Lower-level specs, marks, axes, themes, scales, and renderers
-- Responsive Canvas rendering and WebGL point clouds
-- Selection, wheel/touch zoom, pan, hover, and click-to-pin line focus
-- Animated entry, replay, viewport changes, and resize transitions
-- Mutable and subscribable data sources for streaming dashboards
-- No runtime npm dependencies
+### Render work follows screen density
 
-## Requirements
+Large data should not produce more geometry than the display can show.
+`createLodSeries()` keeps hierarchical first/last/min/max buckets and resolves
+only the detail needed for the current viewport and pixel width. Multi-series
+lines are decimated independently so one series cannot erase another's extrema.
 
-- A modern browser with Canvas support
-- Node.js 18 or newer for development and package builds
-- A chart container with a measurable width and height
+Grouped and stacked bars use a similar pixel budget. Dense groups are reduced
+to representative envelopes instead of encoding every off-screen or
+sub-pixel bar.
+
+### Scatter data stays GPU-friendly
+
+Scatter charts encode their points as point-cloud primitives rendered with
+WebGL. `createScatterSeries()` maintains growable `Float32Array` buffers and a
+stable cache identity. Appends mark only the new range as dirty, allowing the
+renderer to update the existing GPU buffer with `bufferSubData()` rather than
+re-uploading the full cloud.
+
+Point hover uses a cached data-space grid index, avoiding a linear scan of the
+cloud on every pointer move. Axes, labels, and tooltips stay on lightweight 2D
+overlay canvases.
+
+### Updates use specialized fast paths
+
+The plot retains resolved data, axes, layout, mark geometry, and render
+resources between frames. It has targeted paths for:
+
+- streaming line and point-cloud appends
+- zoom, pan, selection, and focus interpolation
+- container and dashboard resizes
+- hover-only overlay redraws
+- axis tick fades without repainting WebGL marks
+
+During live resize, Plod can transform cached Canvas geometry, retain WebGL
+buffers, and update viewport uniforms. Dashboard previews may stagger expensive
+point-cloud paints across charts, then commit a full settle frame.
+
+### Streaming work can be batched
+
+The built-in data sources maintain extents and LOD indexes incrementally.
+`createLodSeries({ bufferAppends: true })` coalesces repeated appends into one
+commit per animation frame. Batch and typed-buffer APIs avoid per-update chart
+reconstruction for high-frequency feeds.
 
 ## Install
 
@@ -31,10 +59,10 @@ this repository.
 npm install plod
 ```
 
-## Quickstart
+Plod is ESM-only and requires a modern browser. The chart container must have
+a measurable size.
 
-Add a container to the page. Plod measures this element, so it must have a
-non-zero size.
+## Quickstart
 
 ```html
 <div id="chart"></div>
@@ -47,214 +75,169 @@ non-zero size.
 </style>
 ```
 
-Create a chart with the fluent builder:
-
 ```ts
 import { plot } from "plod";
 
-type Reading = {
-  date: string;
-  value: number;
-  sensor: string;
-};
-
-const readings: Reading[] = [
-  { date: "2026-01-01", value: 12, sensor: "North" },
-  { date: "2026-01-02", value: 18, sensor: "North" },
-  { date: "2026-01-03", value: 15, sensor: "North" }
+const data = [
+  { time: Date.parse("2026-01-01"), value: 12 },
+  { time: Date.parse("2026-01-02"), value: 18 },
+  { time: Date.parse("2026-01-03"), value: 15 }
 ];
 
-const chart = plot<Reading>("#chart", readings)
-  .interactions({
-    zoom: { mode: "x", wheel: true },
-    pan: { mode: "x", drag: true },
-    dragInteraction: "pan"
-  })
-  .tooltip({
-    position: "cursor",
-    tabularNumbers: true,
-    titleWeight: "semibold"
-  })
-  .line({
-    x: (row) => Date.parse(row.date),
-    y: "value",
-    series: "sensor",
-    timeAxis: true,
-    curve: "monotone-x",
-    lineFocus: true,
-    tooltip: (row) => ({
-      title: row.sensor,
-      lines: [row.date, `Value: ${row.value}`]
-    })
-  });
-```
-
-Accessors such as `x`, `y`, `series`, and `category` accept either a property
-name or a callback. The builder finishes with one of `.line()`, `.area()`,
-`.bar()`, or `.scatter()` and returns a live `Plot` instance.
-
-## Common chart types
-
-### Bar chart
-
-```ts
-const salesChart = plot("#sales", [
-  { month: "Jan", revenue: 42, region: "East" },
-  { month: "Jan", revenue: 35, region: "West" },
-  { month: "Feb", revenue: 51, region: "East" },
-  { month: "Feb", revenue: 39, region: "West" }
-]).bar({
-  x: "month",
-  y: "revenue",
-  series: "region",
-  layout: "grouped",
-  valueLabels: true
-});
-```
-
-Use `layout: "stacked"` or provide `stack`/`stackGroup` for stacked data.
-
-### Area chart
-
-```ts
-const area = plot("#traffic", traffic).area({
-  x: "timestamp",
-  y: "requests",
-  series: "service",
+const chart = plot("#chart", data).line({
+  x: "time",
+  y: "value",
   timeAxis: true,
-  opacity: 0.24,
-  overlap: "blend"
+  curve: "monotone-x",
+  zoom: { mode: "x", wheel: true },
+  pan: { mode: "x", drag: true },
+  dragInteraction: "pan"
 });
+
+chart.update({ data: nextData });
+chart.resize();
+chart.destroy();
 ```
 
-### Scatter chart
+The fluent builder finishes with `.line()`, `.area()`, `.bar()`, or
+`.scatter()`. Accessors accept either a property name or a callback.
+
+## Large and streaming lines
+
+Use `createLodSeries()` when the source is much denser than the chart or grows
+continuously:
 
 ```ts
-const cloud = plot("#scatter", points).scatter({
+import { createLodSeries, plot } from "plod";
+
+const series = createLodSeries({
+  mode: "line",
+  maxRawPointsPerPixel: 6,
+  bufferAppends: true
+});
+
+series.appendBatch(initialPoints);
+
+const chart = plot("#chart", series).line({
   x: "x",
   y: "y",
-  category: "cluster",
-  size: "weight",
-  radiusRange: [2, 10],
-  hoverInteraction: "grow",
+  series: "series",
+  lineFocus: true,
+  timeAxis: true
+});
+
+series.append({ x: Date.now(), y: nextValue, series: "live" });
+// Buffered appends publish automatically on the next frame.
+```
+
+For bulk ingestion, `appendBuffer(x, y, count, series?)` reads from typed or
+array-like columns. `writeFrom()` efficiently replaces a moving live tail.
+
+## Large and streaming scatter
+
+```ts
+import { createScatterSeries, plot } from "plod";
+
+const points = createScatterSeries();
+points.appendIterable(initialPoints);
+
+const chart = plot("#scatter", points).scatter({
+  x: "x",
+  y: "y",
+  category: "series",
+  radius: 2,
+  opacity: 0.7,
   zoom: { mode: "xy", wheel: true },
   pan: { mode: "xy", drag: true }
 });
+
+points.append({ x: nextX, y: nextY, series: nextCategory });
 ```
 
-Scatter presets enable point-cloud optimizations by default. Plod selects its
-rendering path from the encoded scene and available browser capabilities.
+Keeping the same `ScatterSeries` instance is important: its stable identity is
+what lets Plod reuse CPU caches and GPU buffers across appends.
 
-## Updating and controlling a plot
-
-The chart methods schedule rendering; callers do not need to manually redraw
-after normal updates.
+## Grouped and stacked bar LOD
 
 ```ts
-chart.update({ data: nextReadings });
-chart.resize(); // remeasure the container
+import { createGroupedBarSeries, plot } from "plod";
 
-chart.animate({
-  profile: "draw-left",
-  durationMs: 700,
-  easing: "ease-out-cubic"
+const bars = createGroupedBarSeries({
+  data: rows,
+  group: "timestamp",
+  series: "region",
+  value: "revenue",
+  layout: "stacked",
+  maxGroupsPerPixel: 2
 });
 
-chart.focus({ x: [startTimestamp, endTimestamp] });
-chart.resetFocus();
-
-chart.destroy(); // remove observers, listeners, controls, and render surfaces
-```
-
-For append-oriented data sources, use `appendData()` and `clearData()`:
-
-```ts
-chart.appendData({
-  date: "2026-01-04",
-  value: 21,
-  sensor: "North"
+const chart = plot("#bars", bars).bar({
+  x: "group",
+  y: "value",
+  series: "series",
+  layout: "stacked",
+  timeAxis: true
 });
-
-chart.clearData();
 ```
 
-These methods return `true` when the configured data source supports the
-operation. Plain arrays can also be replaced through `update({ data })`.
+## Tuning the render budget
 
-## Presets without the builder
-
-Preset functions return a `PlotSpec`, which can be adjusted before creating a
-plot:
+Optimizations are enabled by default. Lower-level specs can tune or disable
+the screen-density budget:
 
 ```ts
 import { createPlot, lineChart } from "plod";
 
-const element = document.querySelector("#chart");
-if (!element) throw new Error("Missing #chart container");
+const spec = lineChart({ data, x: "time", y: "value" });
 
-const spec = lineChart({
-  data: readings,
-  x: (row) => Date.parse(row.date),
-  y: "value",
-  timeAxis: true,
-  zoom: { mode: "x", wheel: true }
-});
+spec.optimization = {
+  enabled: true,
+  minDensity: 1.5,
+  lineSamplesPerPixel: 2,
+  pointCellSize: 8
+};
 
-spec.title = "Sensor readings";
-spec.chartBorder = { enabled: true, radius: 12 };
+spec.dashboardResizePreview = true;
 
-const chartFromSpec = createPlot(element, spec);
+const chart = createPlot(document.querySelector("#chart")!, spec);
 ```
 
-Use this form when you need to compose presets with lower-level options or
-retain a serializable chart configuration.
+| Option | Effect |
+| --- | --- |
+| `minDensity` | Density threshold before mark-level reduction is worthwhile |
+| `lineSamplesPerPixel` | Target line samples retained per horizontal pixel |
+| `pointCellSize` | Screen-space cell size used by point reduction paths |
+| `dashboardResizePreview` | Enables retained/staggered resize work for multi-chart dashboards |
 
-## Builder configuration
+Use `optimization: false` only when every raw datum must be encoded regardless
+of display density. The built-in data sources may still provide their own
+viewport-specific views.
 
-The fluent builder exposes shared configuration before the final chart type:
+## Plot lifecycle
 
 ```ts
-const chart = plot("#chart", data)
-  .size(900, 480)
-  .axes({
-    x: { title: { text: "Time" } },
-    y: { title: { text: "Value" }, position: "right" }
-  })
-  .interactions({
-    selection: { mode: "x" },
-    zoom: { mode: "x" },
-    pan: { mode: "x" }
-  })
-  .tooltip({
-    shadow: true,
-    titleFont: "regular",
-    titleWeight: "bold"
-  })
-  .modifySpec((spec) => {
-    spec.title = "Live values";
-    spec.edgeBlur = true;
-  })
-  .line({ x: "time", y: "value" });
+chart.appendData(pointOrBatch);
+chart.clearData();
+chart.update({ data, theme, interactions });
+chart.focus({ x: [start, end] });
+chart.resetFocus();
+chart.animate({ profile: "draw-left", durationMs: 700 });
+chart.resize();
+chart.destroy();
 ```
 
-Explicit `.size()` values override container measurement. Omit them for a
-responsive chart and call `resize()` after layout changes if your environment
-does not trigger the built-in observer.
+Create the plot after its element mounts, keep the instance across data
+updates, and call `destroy()` during framework cleanup. Recreating the plot on
+every render discards the caches that make incremental updates fast.
 
-## Public API
+## API surface
 
-The root entry point exports:
+The root module exports:
 
-- `createPlot`, `plot`, `buildPlot`, and `PlotBuilder`
-- `lineChart`, `areaChart`, `barChart`, and `scatterChart`
-- line, bar, point, and scatter marks
-- Canvas rendering and WebGL-backed point-cloud behavior
-- linear and categorical axis builders
-- retained, grouped-bar, scatter, and level-of-detail data series
-- themes, transforms, interaction types, and core plotting contracts
-
-The package ships ESM JavaScript, TypeScript declarations, declaration maps,
-and source maps from `dist/`.
+- `plot`, `buildPlot`, `PlotBuilder`, and `createPlot`
+- line, area, bar, and scatter presets and marks
+- `createLodSeries`, `createScatterSeries`, and `createGroupedBarSeries`
+- axes, scales, themes, transforms, renderer contracts, and plot types
 
 ## Development
 
@@ -266,24 +249,9 @@ npm test
 npm run build
 ```
 
-Useful scripts:
-
-| Command | Purpose |
-| --- | --- |
-| `npm test` | Run the settings contract check and strict typecheck |
-| `npm run typecheck` | Typecheck without emitting build artifacts |
-| `npm run check:settings` | Verify the settings UI and option contracts |
-| `npm run build` | Clean and compile the ESM package and declarations |
-
-See [docs/architecture.md](docs/architecture.md) for internal module
-boundaries, the rendering lifecycle, and extension points.
-
-## Browser and framework usage
-
-Plod owns the DOM below the supplied chart container. In component frameworks,
-create the chart after the element mounts, call `update()` when inputs change,
-and call `destroy()` during cleanup. Import Plod only in browser-executed code
-when using server-side rendering.
+`npm test` runs the settings-contract check and strict TypeScript compiler.
+`npm run build` emits ESM JavaScript, declarations, declaration maps, and source
+maps to `dist/`.
 
 ## License
 

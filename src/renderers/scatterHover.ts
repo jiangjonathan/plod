@@ -60,11 +60,11 @@ export function drawScatterSceneHover(
 
     context.clearRect(0, 0, scene.size.width, scene.size.height);
 
-    if (hoverInteraction === "grow") {
-      drawGrowScatterHovers(context, primitive, scatterEntries, scene.hover);
-    } else if (hoverInteraction === "crosshair" && scatterHover) {
+    if (hoverInteraction === "crosshair" && scatterHover) {
       drawScatterCrosshair(context, primitive, scatterHover.index);
     }
+
+    drawGrowScatterHovers(context, primitive, scatterEntries, scene.hover);
 
     return;
   }

@@ -1,7 +1,7 @@
 {
   "name": "plod",
   "version": "0.1.0",
-  "description": "A browser-first TypeScript plotting library for responsive, interactive Canvas and WebGL charts.",
+  "description": "A performance-first TypeScript plotting engine with Canvas, WebGL, streaming, and level-of-detail rendering.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -18,9 +18,7 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CONTRIBUTING.md",
-    "SECURITY.md"
+    "LICENSE"
   ],
   "exports": {
     ".": {
@@ -41,6 +39,9 @@
     "plotting",
     "canvas",
     "webgl",
+    "streaming",
+    "large-data",
+    "level-of-detail",
     "visualization",
     "typescript"
   ],
