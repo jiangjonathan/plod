@@ -41,6 +41,7 @@ export type { Mark } from "./marks/types";
 export { barMark } from "./marks/barMark";
 export type { BarAppearance, BarFillMode, BarLayoutMode, BarOutlineStyle, BarValueLabelOptions } from "./marks/barMark";
 export { lineMark } from "./marks/lineMark";
+export type { LineHoverGuide, LineHoverGuideStyle, LineMarkOptions } from "./marks/lineMark";
 export { pointMark } from "./marks/pointMark";
 export { scatterMark } from "./marks/scatterMark";
 export type { ScatterMarkOptions } from "./marks/scatterMark";

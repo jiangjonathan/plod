@@ -1,6 +1,6 @@
 import type { AxesOverrideSpec, EdgeBlurSpec, LineCurve, PanSpec, PlotSpec, SelectionSpec, TitleAnimationProfile, TooltipResult, TooltipSpec, ZoomSpec } from "../core/types";
 import { cartesianLinearAxes } from "../axes/builders";
-import { lineMark } from "../marks/lineMark";
+import { lineMark, type LineHoverGuide, type LineHoverGuideStyle } from "../marks/lineMark";
 import type { Accessor } from "../marks/types";
 import type { DataInput } from "../data/types";
 
@@ -28,6 +28,8 @@ export type LineChartOptions<TDatum> = {
   tooltip?: boolean | ((datum: TDatum, index: number) => TooltipResult);
   tooltipVisibleOnly?: boolean;
   lineFocus?: boolean;
+  hoverGuide?: LineHoverGuide;
+  hoverGuideStyle?: LineHoverGuideStyle;
   axes?: boolean | AxesOverrideSpec;
   timeAxis?: boolean | "auto" | "year" | "month" | "day" | "hour" | "minute" | "second";
   yAxisPosition?: "left" | "right";
@@ -72,7 +74,9 @@ export function lineChart<TDatum>(options: LineChartOptions<TDatum>): PlotSpec<T
       ...(options.areaStroke !== undefined ? { areaStroke: options.areaStroke } : {}),
       ...(options.tooltip !== undefined ? { tooltip: options.tooltip } : {}),
       ...(options.tooltipVisibleOnly !== undefined ? { tooltipVisibleOnly: options.tooltipVisibleOnly } : {}),
-      ...(options.lineFocus !== undefined ? { lineFocus: options.lineFocus } : {})
+      ...(options.lineFocus !== undefined ? { lineFocus: options.lineFocus } : {}),
+      ...(options.hoverGuide !== undefined ? { hoverGuide: options.hoverGuide } : {}),
+      ...(options.hoverGuideStyle !== undefined ? { hoverGuideStyle: options.hoverGuideStyle } : {})
     })]
   };
   if (options.timeZone !== undefined) spec.timeZone = options.timeZone;

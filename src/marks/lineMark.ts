@@ -8,6 +8,9 @@ export const DEFAULT_LINE_STROKE_WIDTH = 1.5;
 /** Default area fill opacity when `areaOpacity` is unset. Keep in sync with settings UI. */
 export const DEFAULT_LINE_AREA_OPACITY = 0.18;
 
+export type LineHoverGuide = "none" | "vertical" | "horizontal" | "crosshair";
+export type LineHoverGuideStyle = "solid" | "dashed";
+
 export type LineMarkOptions<TDatum> = {
   x: Accessor<TDatum, number>;
   y: Accessor<TDatum, number>;
@@ -43,6 +46,10 @@ export type LineMarkOptions<TDatum> = {
   tooltip?: boolean | ((datum: TDatum, index: number) => TooltipResult);
   tooltipVisibleOnly?: boolean;
   lineFocus?: boolean;
+  /** Guide shown through the active hover point. Defaults to "vertical". */
+  hoverGuide?: LineHoverGuide;
+  /** Hover guide stroke style. Defaults to "dashed". */
+  hoverGuideStyle?: LineHoverGuideStyle;
 };
 
 export function lineMark<TDatum>(options: LineMarkOptions<TDatum>): Mark<TDatum> {
@@ -532,17 +539,40 @@ function resolveLineHoverPrimitives<TDatum>(
     visiblePoints = visiblePoints.filter((point) => point.y >= plotArea.y && point.y <= plotArea.y + plotArea.height);
   }
 
-  return [
-    {
+  const hoverGuide = options.hoverGuide ?? "vertical";
+  const guideStyle = options.hoverGuideStyle ?? "dashed";
+  const guidePaint = {
+    stroke: withAlpha(foreground, 0.16),
+    strokeWidth: 1,
+    ...(guideStyle === "dashed" ? { strokeDash: [4, 4] as const } : {}),
+    clip: clipArea ?? plotArea
+  };
+  const guidePrimitives: Primitive[] = [];
+
+  if (hoverGuide === "vertical" || hoverGuide === "crosshair") {
+    guidePrimitives.push({
       kind: "path",
       points: [
         [anchor.x, plotArea.y],
         [anchor.x, plotArea.y + plotArea.height]
       ],
-      stroke: "rgba(0, 0, 0, 0.28)",
-      strokeWidth: 1,
-      clip: clipArea ?? plotArea
-    },
+      ...guidePaint
+    });
+  }
+
+  if (hoverGuide === "horizontal" || hoverGuide === "crosshair") {
+    guidePrimitives.push({
+      kind: "path",
+      points: [
+        [plotArea.x, anchor.y],
+        [plotArea.x + plotArea.width, anchor.y]
+      ],
+      ...guidePaint
+    });
+  }
+
+  return [
+    ...guidePrimitives,
     ...visiblePoints.map((point) => ({
       kind: "circle" as const,
       x: point.x,

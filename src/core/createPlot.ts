@@ -2213,6 +2213,14 @@ export function createPlot<TDatum>(container: Element, initialSpec: PlotSpec<TDa
         );
         nextPresetOpts.tooltipVisibleOnly = (popoverEl.querySelector("#set-line-visible-tooltip") as HTMLInputElement).checked;
         nextPresetOpts.lineFocus = (popoverEl.querySelector("#set-line-focus") as HTMLInputElement).checked;
+        const hoverGuideInput = popoverEl.querySelector("#set-line-hover-guide") as HTMLSelectElement | null;
+        if (hoverGuideInput) {
+          nextPresetOpts.hoverGuide = hoverGuideInput.value;
+        }
+        const hoverGuideStyleInput = popoverEl.querySelector("#set-line-hover-guide-style") as HTMLSelectElement | null;
+        if (hoverGuideStyleInput) {
+          nextPresetOpts.hoverGuideStyle = hoverGuideStyleInput.value;
+        }
 
         nextSpec.marks = [lineMark(nextPresetOpts)];
       } else if (markKind === "scatter") {

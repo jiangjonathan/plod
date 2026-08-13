@@ -256,6 +256,10 @@ The root entry point exports:
 The package ships ESM JavaScript, TypeScript declarations, declaration maps,
 and source maps from `dist/`.
 
+Line charts use a light dashed vertical hover guide by default. Configure it
+with `hoverGuide: "vertical" | "horizontal" | "crosshair" | "none"` and
+`hoverGuideStyle: "dashed" | "solid"` in `lineChart()` or `lineMark()` options.
+
 ## Development
 
 ```sh

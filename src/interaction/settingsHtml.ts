@@ -125,6 +125,8 @@ export function generateSettingsHtml<TDatum>(ctx: SettingsHtmlContext<TDatum>): 
       const strokeWidth = Number.isFinite(presetOpts.strokeWidth) ? presetOpts.strokeWidth : DEFAULT_LINE_STROKE_WIDTH;
       const tooltipVisibleOnly = presetOpts.tooltipVisibleOnly === true;
       const lineFocus = presetOpts.lineFocus === true;
+      const hoverGuide = presetOpts.hoverGuide ?? "vertical";
+      const hoverGuideStyle = presetOpts.hoverGuideStyle ?? "dashed";
 
       chartSpecificHTML = `
         <details class="plot-settings-section" data-section="line"${settingsSectionOpenAttr("line")}>
@@ -185,6 +187,22 @@ export function generateSettingsHtml<TDatum>(ctx: SettingsHtmlContext<TDatum>): 
             <div class="plot-settings-row">
               <label>Line Focus</label>
               <input type="checkbox" id="set-line-focus" ${lineFocus ? "checked" : ""}>
+            </div>
+            <div class="plot-settings-row">
+              <label>Hover Guide</label>
+              <select id="set-line-hover-guide">
+                <option value="vertical" ${hoverGuide === "vertical" ? "selected" : ""}>Vertical line</option>
+                <option value="horizontal" ${hoverGuide === "horizontal" ? "selected" : ""}>Horizontal line</option>
+                <option value="crosshair" ${hoverGuide === "crosshair" ? "selected" : ""}>Crosshair</option>
+                <option value="none" ${hoverGuide === "none" ? "selected" : ""}>None</option>
+              </select>
+            </div>
+            <div class="plot-settings-row">
+              <label>Hover Guide Style</label>
+              <select id="set-line-hover-guide-style">
+                <option value="dashed" ${hoverGuideStyle === "dashed" ? "selected" : ""}>Dashed</option>
+                <option value="solid" ${hoverGuideStyle === "solid" ? "selected" : ""}>Solid</option>
+              </select>
             </div>
           </div>
         </details>
