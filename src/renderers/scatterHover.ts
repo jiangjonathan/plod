@@ -91,8 +91,8 @@ function drawScatterCrosshair(
   context.lineTo(hit.x, plotArea.y + plotArea.height);
   context.moveTo(plotArea.x, hit.y);
   context.lineTo(plotArea.x + plotArea.width, hit.y);
-  context.strokeStyle = hit.fill ?? primitive.fill ?? "#111111";
-  context.globalAlpha = 0.35;
+  context.strokeStyle = primitive.hoverCrosshairColor ?? "#111111";
+  context.globalAlpha = 0.38;
   context.lineWidth = 1;
   context.setLineDash([4, 4]);
   context.stroke();

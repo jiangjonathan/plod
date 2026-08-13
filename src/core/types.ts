@@ -472,6 +472,7 @@ export type Primitive =
       hoverInteraction?: ScatterHoverInteraction;
       hoverGrowRadius?: number;
       hoverOutline?: boolean | string | MarkerStyle;
+      hoverCrosshairColor?: string;
       clip?: Rect;
       isRaw?: boolean;
       xDomain?: readonly [number, number];

@@ -239,8 +239,8 @@ export function generateSettingsHtml<TDatum>(ctx: SettingsHtmlContext<TDatum>): 
             <div class="plot-settings-row">
               <label>Hover Mode</label>
               <select id="${SCATTER_SETTING_IDS.hoverMode}">
-                <option value="grow" ${hoverInteraction === "grow" ? "selected" : ""}>Grow</option>
                 <option value="crosshair" ${hoverInteraction === "crosshair" ? "selected" : ""}>Crosshair</option>
+                <option value="grow" ${hoverInteraction === "grow" ? "selected" : ""}>Grow</option>
               </select>
             </div>
             <div class="plot-settings-row">

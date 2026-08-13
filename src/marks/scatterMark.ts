@@ -560,6 +560,7 @@ export function scatterMark<TDatum>(options: ScatterMarkOptions<TDatum>): Mark<T
         hoverInteraction,
         hoverGrowRadius: options.hoverGrowRadius ?? 7,
         hoverOutline: options.hoverOutline ?? true,
+        hoverCrosshairColor: theme.palette.foreground,
         clip: animated.clip,
         isRaw: true,
         xDomain,
